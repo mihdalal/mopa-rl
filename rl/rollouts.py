@@ -42,7 +42,9 @@ class RolloutRunner(object):
         self._env = env
         self._env_eval = env_eval
         self._pi = pi
-        self._ik_env = gym.make(config.env, **config.__dict__)
+        #self._ik_env = gym.make(config.env, **config.__dict__)
+        # set ik env to None now since none of our experiments require it
+        self._ik_env = None
 
     def run(
         self,
@@ -79,8 +81,18 @@ class RolloutRunner(object):
             ep_len = 0
             ep_rew = 0
             ob = env.reset()
+            # modification for robosuite lift
+            env._episode_length = 0
+            env.epsiode_reward = 0
             if config.use_ik_target:
                 ik_env.reset()
+
+            # modify observation to fit their format
+            if config.env == "Lift":
+                observation = ob.copy()
+                ob = OrderedDict()
+                ob['default'] = observation 
+
             # run rollout
             meta_ac = None
             while not done and ep_len < max_step:
@@ -132,12 +144,22 @@ class RolloutRunner(object):
                             {"done": done, "rew": meta_rew, "intra_steps": intra_steps}
                         )
                     else:
-                        ob, reward, done, info = env.step(ac)
+                        if config.env != "Lift":
+                            ob, reward, done, info = env.step(ac)
+                        else:
+                            observation, reward, done, info = env.step(ac['default'])
+                            ob = OrderedDict()
+                            ob['default'] = observation.copy()
+                            info["episode_success"] = int(env.env._check_success())
+                            info["reward"] = reward
                         rollout.add({"done": done, "rew": reward})
                         ep_len += 1
                         step += 1
                         env_step += 1
                         ep_rew += reward
+                        if config.env == "Lift":
+                            env._episode_length += 1
+                            env._episode_reward += reward
                         reward_info.add(info)
                 if every_steps is not None and step % every_steps == 0:
                     # last frame
@@ -177,6 +199,11 @@ class RolloutRunner(object):
         ep_len = 0
         ep_rew = 0
         ob = env.reset()
+        # modify observation to fit their format
+        if config.env == "Lift":
+            observation = ob.copy()
+            ob = OrderedDict()
+            ob['default'] = observation 
         if config.use_ik_target:
             ik_env.reset()
         self._record_frames = []
@@ -246,19 +273,29 @@ class RolloutRunner(object):
                         {"done": done, "rew": meta_rew, "intra_steps": intra_steps}
                     )
                 else:
-                    ob, reward, done, info = env.step(ac)
+                    if config.env != "Lift":
+                            ob, reward, done, info = env.step(ac)
+                    else:
+                        observation, reward, done, info = env.step(ac['default'])
+                        ob = OrderedDict()
+                        ob['default'] = observation.copy()
+                        info["episode_success"] = int(env.env._check_success())
+                        info["reward"] = reward
                     rollout.add({"done": done, "rew": reward})
                     ep_len += 1
                     ep_rew += reward
+                    if config.env == "Lift":
+                        env._episode_length += 1
+                        env._episode_reward += reward
                     reward_info.add(info)
 
-                contact_force = env.get_contact_force()
-                total_contact_force += contact_force
+                #contact_force = env.get_contact_force()
+                #total_contact_force += contact_force
 
                 if record and not config.expand_ac_space:
                     frame_info = info.copy()
                     frame_info["ac"] = ac["default"]
-                    frame_info["contact_force"] = contact_force
+                    #frame_info["contact_force"] = contact_force
                     if config.use_ik_target:
                         frame_info["converted_ac"] = converted_ac["default"]
                     frame_info["std"] = np.array(stds["default"].detach().cpu())[0]
@@ -335,7 +372,10 @@ class RolloutRunner(object):
 
         text = "{:4} {}".format(env._episode_length, env._episode_reward)
 
-        frame = env.render("rgb_array") * 255.0
+        if self._config.env != "Lift":
+            frame = env.render("rgb_array") * 255.0
+        else:
+            frame = np.flipud(env._get_observations()["frontview_image"])
 
         if self._config.vis_info:
             fheight, fwidth = frame.shape[:2]

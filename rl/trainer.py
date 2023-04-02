@@ -26,6 +26,69 @@ from util.mpi import mpi_sum
 from util.gym import observation_size, action_size
 from util.misc import make_ordered_pair
 
+###################### CODE TO SET UP ROBOSUITE ENVIRONMENT #################################
+import robosuite as suite 
+from robosuite.wrappers.gym_wrapper import GymWrapper
+
+def make_standard_environment():
+    expl_environment_kwargs = {
+            "control_freq": 20,
+            "controller_configs": {
+            "control_delta": True,
+            "damping": 1,
+            "damping_limits": [
+                0,
+                10
+            ],
+            "impedance_mode": "fixed",
+            "input_max": 1,
+            "input_min": -1,
+            "interpolation": None,
+            "kp": 150,
+            "kp_limits": [
+                0,
+                300
+            ],
+            "orientation_limits": None,
+            "output_max": [
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+                0.5,
+            ],
+            "output_min": [
+                -0.5,
+                -0.5,
+                -0.5,
+                -0.5,
+                -0.5,
+                -0.5,
+            ],
+            "position_limits": None,
+            "ramp_ratio": 0.2,
+            "type": "OSC_POSE",
+            "uncouple_pos_ori": True
+            },
+            "env_name": "Lift",
+            "horizon": 250,
+            "ignore_done": True,
+            "reward_shaping": True,
+            "robots": "Panda",
+            "use_object_obs": True,
+            "use_camera_obs": True,
+            "camera_names":"frontview",
+        }
+    env = suite.make(**expl_environment_kwargs)
+    # pass through gymwrapper 
+    env = GymWrapper(env, keys=['robot0_proprio-state', 'object-state'])
+    # initialize episode length and episode reward 
+    env._episode_length = 0
+    env._episode_reward = 0
+    return env
+
+#############################################################################################
 
 def get_agent_by_name(algo):
     if algo == "sac":
@@ -46,32 +109,46 @@ class Trainer(object):
         self._is_chef = config.is_chef
 
         # create a new environment
-        self._env = gym.make(config.env, **config.__dict__)
-        self._env_eval = (
-            gym.make(config.env, **copy.copy(config).__dict__)
-            if self._is_chef
-            else None
-        )
-        self._config._xml_path = self._env.xml_path
+        if config.env != "Lift":
+            self._env = gym.make(config.env, **config.__dict__)
+            self._env_eval = (
+                gym.make(config.env, **copy.copy(config).__dict__)
+                if self._is_chef
+                else None
+            )
+            self._config._xml_path = self._env.xml_path
+            ob_space = self._env.observation_space
+            ac_space = self._env.action_space
+            joint_space = self._env.joint_space 
+        else:
+            self._env = make_standard_environment()
+            self._env_eval = make_standard_environment()
+            self._config._xml_path = None 
+            # set various attributes to None 
+            self._env.ref_joint_pos_indexes = None
+            self._env.jnt_indices = None 
+            self._env._is_jnt_limited = None 
+            # modify observation space to fit their format
+            ob_space = spaces.Dict({'default': self._env.observation_space})
+            ac_space = spaces.Dict({'default': self._env.action_space})
+            joint_space = None 
+            self._env.joint_space = None
+
         config.nq = self._env.sim.model.nq
 
-        ob_space = self._env.observation_space
-        ac_space = self._env.action_space
-        joint_space = self._env.joint_space
-
         allowed_collsion_pairs = []
-        for manipulation_geom_id in self._env.manipulation_geom_ids:
-            for geom_id in self._env.static_geom_ids:
-                allowed_collsion_pairs.append(
-                    make_ordered_pair(manipulation_geom_id, geom_id)
-                )
-
         ignored_contact_geom_ids = []
-        ignored_contact_geom_ids.extend(allowed_collsion_pairs)
-        config.ignored_contact_geom_ids = ignored_contact_geom_ids
-
         passive_joint_idx = list(range(len(self._env.sim.data.qpos)))
-        [passive_joint_idx.remove(idx) for idx in self._env.ref_joint_pos_indexes]
+        if config.env != "Lift":
+            for manipulation_geom_id in self._env.manipulation_geom_ids:
+                for geom_id in self._env.static_geom_ids:
+                    allowed_collsion_pairs.append(
+                        make_ordered_pair(manipulation_geom_id, geom_id)
+                    )
+
+            ignored_contact_geom_ids.extend(allowed_collsion_pairs)
+            config.ignored_contact_geom_ids = ignored_contact_geom_ids
+            [passive_joint_idx.remove(idx) for idx in self._env.ref_joint_pos_indexes]
         config.passive_joint_idx = passive_joint_idx
 
         # get actor and critic networks

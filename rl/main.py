@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
     if "Pusher" in args.env:
         from config.pusher import add_arguments
-    elif "Sawyer" in args.env:
+    elif "Sawyer" in args.env or "Lift" in args.env:
         from config.sawyer import add_arguments
     else:
         raise ValueError("args.env (%s) is not supported" % args.env)
