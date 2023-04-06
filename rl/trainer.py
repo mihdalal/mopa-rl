@@ -7,6 +7,7 @@ import h5py
 import copy
 
 import torch
+from tqdm import tqdm
 import wandb
 import numpy as np
 import moviepy.editor as mpy
@@ -453,12 +454,14 @@ class Trainer(object):
         Run num_record_samples rollouts if in train mode
         """
         vids = []
-        for i in range(self._config.num_record_samples):
+        avg_info = defaultdict(list)
+        for i in tqdm(range(self._config.num_record_samples)):
             rollout, info, frames = self._runner.run_episode(
                 is_train=False, record=record
             )
-
-            if record:
+            for k in info.keys():
+                avg_info[k].append(info[k])
+            if record and i == 0:
                 ep_rew = info["rew"]
                 ep_success = "s" if info["episode_success"] else "f"
                 fname = "{}_step_{:011d}_{}_r_{}_{}.mp4".format(
@@ -475,6 +478,7 @@ class Trainer(object):
                 break
 
         logger.info("rollout: %s", {k: v for k, v in info.items() if not "qpos" in k})
+        info = {k:np.mean(avg_info[k]) for k in avg_info.keys() if key != 'rew'}
         return rollout, info, np.array(vids)
 
     def evaluate(self):

@@ -14,12 +14,12 @@ ik_target="grip_site"
 action_range="0.001"
 lr_actor="0.001"
 lr_critic="0.0005"
-num_record_samples="1"
 wandb="True"
 entity="tchiruvolu"
 project="moparl_tests"
 reward_type="dense"
 vis_replay="False"
+num_record_samples="5"
 
 python -m rl.main \
     --log_root_dir $log_root_dir \
@@ -37,9 +37,9 @@ python -m rl.main \
     --action_range $action_range \
     --lr_actor $lr_actor \
     --lr_critic $lr_critic \
-    --num_record_samples $num_record_samples \
     --wandb $wandb \
     --entity $entity \
     --project $project \
     --reward_type $reward_type \
-    --vis_replay $vis_replay
+    --vis_replay $vis_replay \
+    --num_record_samples $num_record_samples

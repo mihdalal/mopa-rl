@@ -152,6 +152,7 @@ class RolloutRunner(object):
                             ob['default'] = observation.copy()
                             info["episode_success"] = int(env.env._check_success())
                             info["reward"] = reward
+                            done = ep_len == env.horizon - 1
                         rollout.add({"done": done, "rew": reward})
                         ep_len += 1
                         step += 1
@@ -281,6 +282,7 @@ class RolloutRunner(object):
                         ob['default'] = observation.copy()
                         info["episode_success"] = int(env.env._check_success())
                         info["reward"] = reward
+                        done = ep_len == env.horizon - 1
                     rollout.add({"done": done, "rew": reward})
                     ep_len += 1
                     ep_rew += reward

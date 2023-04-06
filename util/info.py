@@ -28,7 +28,9 @@ class Info(object):
     def get_dict(self, reduction="mean", only_scalar=False):
         ret = {}
         for k, v in self._info.items():
-            if np.isscalar(v):
+            if k == "episode_success":
+                ret[k] = int(np.sum(v) > 0)
+            elif np.isscalar(v):
                 ret[k] = v
             elif isinstance(v[0], (int, float, bool, np.float32, np.int64)):
                 if "_mean" in k or reduction == "mean":
