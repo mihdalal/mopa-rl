@@ -16,7 +16,8 @@ class MoPARolloutRunner(object):
         self._config = config
         self._env = env
         self._env_eval = env_eval
-        self._ik_env = gym.make(config.env, **config.__dict__)
+        #self._ik_env = gym.make(config.env, **config.__dict__)
+        self._ik_env = None
         self._pi = pi
 
     def run(
@@ -80,6 +81,7 @@ class MoPARolloutRunner(object):
 
                 curr_qpos = env.sim.data.qpos.copy()
                 prev_qpos = env.sim.data.qpos.copy()
+                assert (curr_qpos == env.env.sim.data.qpos).all()
                 target_qpos = curr_qpos.copy()
                 prev_ob = ob.copy()
                 is_planner = False

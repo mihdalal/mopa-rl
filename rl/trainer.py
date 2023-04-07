@@ -17,6 +17,7 @@ import gym
 from gym import spaces
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+from collections import OrderedDict
 
 from rl.policies import get_actor_critic_by_name
 from rl.rollouts import RolloutRunner
@@ -89,6 +90,238 @@ def make_standard_environment():
     env._episode_reward = 0
     return env
 
+class LiftEnv:
+
+    def __init__(self):
+        expl_environment_kwargs = {
+            "controller_configs": {'type': 'JOINT_POSITION', 
+                                    'input_max': 1, 
+                                    'input_min': -1, 
+                                    'output_max': 0.05, 
+                                    'output_min': -0.05, 
+                                    'kp': 50, 
+                                    'damping_ratio': 1, 
+                                    'impedance_mode': 'fixed', 
+                                    'kp_limits': [0, 300], 
+                                    'damping_ratio_limits': [0, 10], 
+                                    'qpos_limits': None, 
+                                    'interpolation': None, 
+                                    'ramp_ratio': 0.2
+                                    },
+            "env_name": "Lift",
+            "horizon": 250,
+            "ignore_done": True,
+            "reward_shaping": True,
+            "robots": "Sawyer", # remember to use Sawyer when generating xml
+            "use_object_obs": True,
+            "use_camera_obs": True,
+            "camera_names":"frontview",
+        }
+        self.env = suite.make(**expl_environment_kwargs)
+        # pass through GymWrapper 
+        self.env = GymWrapper(self.env, keys=['robot0_proprio-state', 'object-state'])
+        self._episode_length = 0
+        self._episode_reward = 0
+        self.horizon = 250
+        # robot dof is dof of robots[0]
+        self.robot_dof = 7
+        self.dof = 8
+        # provide joint information -> copied directly from env.base
+        self._init_qpos = self.env.sim.data.qpos.ravel().copy()
+        self._init_qvel = self.env.sim.data.qvel.ravel().copy()
+        self.jnt_indices = []
+        for i, jnt_type in enumerate(self.env.sim.model.jnt_type):
+            if jnt_type == 0:
+                for _ in range(7):
+                    self.jnt_indices.append(i)
+            elif jnt_type == 1:
+                for _ in range(4):
+                    self.jnt_indices.append(i)
+            else:
+                self.jnt_indices.append(i)
+        jnt_range = self.env.sim.model.jnt_range
+        is_jnt_limited = self.env.sim.model.jnt_limited.astype(np.bool)
+        jnt_minimum = np.full(len(is_jnt_limited), fill_value=-np.inf, dtype=np.float)
+        jnt_maximum = np.full(len(is_jnt_limited), fill_value=np.inf, dtype=np.float)
+        jnt_minimum[is_jnt_limited], jnt_maximum[is_jnt_limited] = jnt_range[
+            is_jnt_limited
+        ].T
+        jnt_minimum[np.invert(is_jnt_limited)] = -3.14
+        jnt_maximum[np.invert(is_jnt_limited)] = 3.14
+        self._is_jnt_limited = is_jnt_limited
+        self._jnt_minimum = jnt_minimum
+        self._jnt_maximum = jnt_maximum
+        # I could have also included cube_g0_vis here since it is the other cube related
+        # geom when calling env.sim.model.geom_name2id
+        self.manipulation_geom = ["cube_g0", "cube_g0_vis"]  
+        self.manipulation_geom_ids = [self.env.sim.model.geom_name2id(name) for name in self.manipulation_geom]
+        self.static_bodies = ["world", "table"]
+        # copied from sawyer lift code
+        body_ids = []
+        for body_name in self.static_bodies:
+            body_ids.append(self.env.sim.model.body_name2id(body_name))
+
+        self.static_geom_ids = []
+        for geom_id, body_id in enumerate(self.env.sim.model.geom_bodyid):
+            if body_id in body_ids:
+                self.static_geom_ids.append(geom_id)
+
+        self.robot_joints = [f"robot0_right_j{i}" for i in range(7)]
+        self.gripper_joints = ['gripper0_l_finger_joint', 'gripper0_r_finger_joint']
+        self.ref_joint_pos_indexes = [
+            self.env.sim.model.get_joint_qpos_addr(x) for x in self.robot_joints
+        ]
+        self.ref_joint_vel_indexes = [
+            self.env.sim.model.get_joint_qvel_addr(x) for x in self.robot_joints
+        ]
+
+        # indices for grippers in qpos, qvel
+        self.ref_gripper_joint_pos_indexes = [
+            self.env.sim.model.get_joint_qpos_addr(x) for x in self.gripper_joints
+        ]
+        self.ref_gripper_joint_vel_indexes = [
+            self.env.sim.model.get_joint_qvel_addr(x) for x in self.gripper_joints
+        ]
+        # define joint space
+        self.joint_space = spaces.Dict(
+            [
+                (
+                    "default",
+                    spaces.Box(low=jnt_minimum, high=jnt_maximum, dtype=np.float32),
+                )
+            ]
+        )
+
+        # ac scale is q_step in paper
+        self._ac_scale = 1.0
+        
+        self.xml_path="/home/tarunc/Desktop/research/mopa-rl-1/rl/lift_env.xml"
+        """
+        HAVE NOT ADDED YET
+        ref_joint_pos_indexes X
+        ref_gripper_joint_pos_indexes X
+        handling sim X
+        _ac_scale X
+        _terminal X
+        min_world_size --> only used for ik
+        max_world_size
+        _jnt_minimum X
+        _jnt_maximum X
+        jnt_indices X
+        _is_jnt_limited X
+        manipulation_geom_ids X
+        static_geom_ids X 
+        joint_space X
+        observation_space X
+        action_space X
+        robot_dof X
+        do i need to change output max/min
+        add keys to info so we get reward + episode success
+        """
+        return 
+
+    @property 
+    def sim(self):
+        return self.env.sim
+    
+    @property
+    def observation_space(self):
+        ob_space = spaces.Dict({'default': self.env.observation_space})
+        return ob_space 
+
+    @property
+    def action_space(self):
+        ac_space = spaces.Dict({'default': self.env.action_space})
+        return ac_space
+
+    def render(self, mode):
+        # mode is unused, we always want rgb array
+        frame = self.env._get_observations()["frontview_image"]
+        return np.flipud(frame / 255.0)
+
+    def reset(self):
+        o = self.env.reset()
+        ob = OrderedDict()
+        ob['default'] = o
+        self._after_reset()
+        return ob
+
+    def step(self, action, is_planner=False):
+        # note, desired action should be delta in action space, which is what 
+        # mopa already does 
+        # I also don't think I need to do any gripper scaling stuff -
+        # ref joint pos indexes has length 7, and the 8th dimension is action
+        # so everything is already handled in mopa_rollouts
+        action = action['default']
+        o, r, d, i = self.env.step(action)
+        # updating success the same way they do, adding this because they might be 
+        # calling compute reward in isolation, requiring the success variable to be updated
+        self.compute_reward(action)
+        ob = OrderedDict()
+        ob['default'] = o.copy()
+        d, i, p = self._after_step(r, d, i)
+        i["episode_success"] = int(self._success)
+        i["reward"] = r
+        return ob, r + p, d, i
+
+    def form_action(self, next_qpos, curr_qpos=None):
+        if curr_qpos is None:
+            curr_qpos = self.env.sim.data.qpos.copy() # modified to take env.sim instead of self.sim
+        joint_ac = (
+            next_qpos[self.ref_joint_pos_indexes]
+            - curr_qpos[self.ref_joint_pos_indexes]
+        )
+        if self.dof == 8:
+            gripper = (
+                next_qpos[self.ref_gripper_joint_pos_indexes]
+                - curr_qpos[self.ref_gripper_joint_pos_indexes]
+            )
+            gripper_ac = gripper[0]
+            ac = OrderedDict([("default", np.concatenate([joint_ac, [gripper_ac]]))])
+        else:
+            ac = OrderedDict([("default", joint_ac)])
+        return ac
+
+    def compute_reward(self, action):
+        if self.env._check_success():
+            self._success = True
+        return self.env.reward(action), {"episode_success":int(self._success), "reward": self.env.reward(action)}
+    
+    def check_success(self):
+        return self.env._check_success()
+
+    def _after_step(self, reward, terminal, info):
+        self._episode_reward += reward 
+        self._episode_length += 1
+        self._terminal = terminal or self._episode_length == self.env.horizon
+        return self._terminal, info, 0.0 
+
+    def _after_reset(self):
+        self._episode_reward = 0
+        self._episode_length = 0
+        self._terminal = False 
+        self._success = False 
+        self._fail = False 
+
+    def get_contact_force(self):
+        return 0.0
+    
+    # METHODS I DON"T THINK WE NEED 
+    def visualize_goal_indicator(joints):
+        pass
+
+    def reset_visualized_indicator(self):
+        pass
+
+    def color_agent(self):
+        pass
+    
+    def _reset_prev_state(self):
+        pass
+
+def make_mopa_environment():
+    return LiftEnv()
+
 #############################################################################################
 
 def get_agent_by_name(algo):
@@ -111,12 +344,17 @@ class Trainer(object):
 
         # create a new environment
         if config.env != "Lift":
-            self._env = gym.make(config.env, **config.__dict__)
-            self._env_eval = (
-                gym.make(config.env, **copy.copy(config).__dict__)
-                if self._is_chef
-                else None
-            )
+            if config.env != "LiftMoPA":
+                self._env = gym.make(config.env, **config.__dict__)
+                self._env_eval = (
+                    gym.make(config.env, **copy.copy(config).__dict__)
+                    if self._is_chef
+                    else None
+                )
+            else:
+                self._env = make_mopa_environment()
+                self._env_eval = make_mopa_environment()
+                config.xml_path="/home/tarunc/Desktop/research/mopa-rl-1/rl/lift_env.xml"
             self._config._xml_path = self._env.xml_path
             ob_space = self._env.observation_space
             ac_space = self._env.action_space
@@ -376,7 +614,6 @@ class Trainer(object):
                     else:
                         step_per_batch = len(rollout["ac"])
                     init_step += step_per_batch
-
                     self._agent.store_episode(rollout)
 
         while step < config.max_global_step:
