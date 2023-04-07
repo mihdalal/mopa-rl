@@ -307,13 +307,13 @@ class LiftEnv:
         return 0.0
     
     # METHODS I DON"T THINK WE NEED 
-    def visualize_goal_indicator(joints):
+    def visualize_goal_indicator(self, joints):
         pass
 
     def reset_visualized_indicator(self):
         pass
 
-    def color_agent(self):
+    def reset_color_agent(self):
         pass
     
     def _reset_prev_state(self):
@@ -606,6 +606,7 @@ class Trainer(object):
         init_ep = 0
         # If it does not previously learned data and use SAC, then we firstly fill the experieince replay with the specified number of samples
         if step == 0:
+            config.start_steps = 0
             if random_runner is not None:
                 while init_step < self._config.start_steps:
                     rollout, info = next(random_runner)
@@ -671,6 +672,7 @@ class Trainer(object):
                     ep_info = defaultdict(list)
 
                 ## Evaluate both MP and RL
+                config.evaluate_interval = 250
                 if update_iter % config.evaluate_interval == 0:
                     logger.info("Evaluate at %d", update_iter)
                     obs = None
@@ -715,7 +717,7 @@ class Trainer(object):
                 break
 
         logger.info("rollout: %s", {k: v for k, v in info.items() if not "qpos" in k})
-        info = {k:np.mean(avg_info[k]) for k in avg_info.keys() if key != 'rew'}
+        info = {k:np.mean(avg_info[k]) for k in avg_info.keys() if k != 'rew'}
         return rollout, info, np.array(vids)
 
     def evaluate(self):
