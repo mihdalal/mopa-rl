@@ -737,7 +737,6 @@ class MoPARolloutRunner(object):
         geom_colors = {}
 
         frame = env.render("rgb_array") * 255.0
-
         if self._config.vis_info:
             if planner:
                 for geom_idx, color in geom_colors.items():

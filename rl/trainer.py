@@ -2,6 +2,7 @@ import os
 from time import time
 from collections import defaultdict
 import gzip
+import cv2
 import pickle
 import h5py
 import copy
@@ -97,8 +98,8 @@ class LiftEnv:
             "controller_configs": {'type': 'JOINT_POSITION', 
                                     'input_max': 1, 
                                     'input_min': -1, 
-                                    'output_max': 0.05, 
-                                    'output_min': -0.05, 
+                                    'output_max': 0.5, 
+                                    'output_min': -0.5, 
                                     'kp': 50, 
                                     'damping_ratio': 1, 
                                     'impedance_mode': 'fixed', 
@@ -112,14 +113,12 @@ class LiftEnv:
             "horizon": 250,
             "ignore_done": True,
             "reward_shaping": True,
-            "robots": "Sawyer", # remember to use Sawyer when generating xml
+            "robots": "Panda",
             "use_object_obs": True,
             "use_camera_obs": True,
             "camera_names":"frontview",
         }
         self.env = suite.make(**expl_environment_kwargs)
-        # pass through GymWrapper 
-        self.env = GymWrapper(self.env, keys=['robot0_proprio-state', 'object-state'])
         self._episode_length = 0
         self._episode_reward = 0
         self.horizon = 250
@@ -166,8 +165,8 @@ class LiftEnv:
             if body_id in body_ids:
                 self.static_geom_ids.append(geom_id)
 
-        self.robot_joints = [f"robot0_right_j{i}" for i in range(7)]
-        self.gripper_joints = ['gripper0_l_finger_joint', 'gripper0_r_finger_joint']
+        self.robot_joints = [f"robot0_joint{i+1}" for i in range(7)]
+        self.gripper_joints = ['gripper0_finger_joint1', 'gripper0_finger_joint2']
         self.ref_joint_pos_indexes = [
             self.env.sim.model.get_joint_qpos_addr(x) for x in self.robot_joints
         ]
@@ -195,29 +194,7 @@ class LiftEnv:
         # ac scale is q_step in paper
         self._ac_scale = 1.0
         
-        self.xml_path="/home/tarunc/Desktop/research/mopa-rl-1/rl/lift_env.xml"
-        """
-        HAVE NOT ADDED YET
-        ref_joint_pos_indexes X
-        ref_gripper_joint_pos_indexes X
-        handling sim X
-        _ac_scale X
-        _terminal X
-        min_world_size --> only used for ik
-        max_world_size
-        _jnt_minimum X
-        _jnt_maximum X
-        jnt_indices X
-        _is_jnt_limited X
-        manipulation_geom_ids X
-        static_geom_ids X 
-        joint_space X
-        observation_space X
-        action_space X
-        robot_dof X
-        do i need to change output max/min
-        add keys to info so we get reward + episode success
-        """
+        self.xml_path="/home/tarunc/Desktop/research/mopa-rl-1/rl/lift_env_panda.xml"
         return 
 
     @property 
@@ -226,23 +203,24 @@ class LiftEnv:
     
     @property
     def observation_space(self):
-        ob_space = spaces.Dict({'default': self.env.observation_space})
+        ob_space = spaces.Dict({'default': spaces.Box(shape=(42,), low=-np.inf, high=np.inf, dtype=np.float32)})
         return ob_space 
 
     @property
     def action_space(self):
-        ac_space = spaces.Dict({'default': self.env.action_space})
+        ac_space = spaces.Dict({'default': spaces.Box(shape=(8,), low=-1., high=1., dtype=np.float32)})
         return ac_space
 
     def render(self, mode):
         # mode is unused, we always want rgb array
-        frame = self.env._get_observations()["frontview_image"]
+        ob = self.env._get_observations()
+        frame = ob['frontview_image']
         return np.flipud(frame / 255.0)
 
     def reset(self):
         o = self.env.reset()
         ob = OrderedDict()
-        ob['default'] = o
+        ob['default'] = np.concatenate([o['robot0_proprio-state'], o['object-state']])
         self._after_reset()
         return ob
 
@@ -258,7 +236,7 @@ class LiftEnv:
         # calling compute reward in isolation, requiring the success variable to be updated
         self.compute_reward(action)
         ob = OrderedDict()
-        ob['default'] = o.copy()
+        ob['default'] = np.concatenate([o['robot0_proprio-state'], o['object-state']])
         d, i, p = self._after_step(r, d, i)
         i["episode_success"] = int(self._success)
         i["reward"] = r
@@ -314,6 +292,9 @@ class LiftEnv:
         pass
 
     def reset_color_agent(self):
+        pass
+
+    def color_agent(self):
         pass
     
     def _reset_prev_state(self):
@@ -486,7 +467,7 @@ class Trainer(object):
             ), "Entity and Project name must be specified"
 
             wandb.init(
-                resume=config.run_name,
+                resume=config.run_name + str(time()),
                 project=config.project,
                 config={k: v for k, v in config.__dict__.items() if k not in exclude},
                 dir=config.log_dir,
@@ -606,7 +587,6 @@ class Trainer(object):
         init_ep = 0
         # If it does not previously learned data and use SAC, then we firstly fill the experieince replay with the specified number of samples
         if step == 0:
-            config.start_steps = 0
             if random_runner is not None:
                 while init_step < self._config.start_steps:
                     rollout, info = next(random_runner)
@@ -672,7 +652,6 @@ class Trainer(object):
                     ep_info = defaultdict(list)
 
                 ## Evaluate both MP and RL
-                config.evaluate_interval = 250
                 if update_iter % config.evaluate_interval == 0:
                     logger.info("Evaluate at %d", update_iter)
                     obs = None
