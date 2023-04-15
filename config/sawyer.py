@@ -118,7 +118,7 @@ def get_default_config():
     import argparse
 
     parser = argparse.ArgumentParser("Default Configuration for Sawyer Environment")
-    add_argument(parser)
+    add_arguments(parser)
 
     parser.add_argument("--seed", type=int, default=1234, help="random seed")
     parser.add_argument("--debug", type=str2bool, default=False, help="enable debugging")

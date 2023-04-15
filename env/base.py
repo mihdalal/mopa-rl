@@ -76,9 +76,9 @@ class BaseEnv(gym.Env):
                 self.jnt_indices.append(i)
 
         jnt_range = self.sim.model.jnt_range
-        is_jnt_limited = self.sim.model.jnt_limited.astype(np.bool)
-        jnt_minimum = np.full(len(is_jnt_limited), fill_value=-np.inf, dtype=np.float)
-        jnt_maximum = np.full(len(is_jnt_limited), fill_value=np.inf, dtype=np.float)
+        is_jnt_limited = self.sim.model.jnt_limited.astype(np.bool_)
+        jnt_minimum = np.full(len(is_jnt_limited), fill_value=-np.inf, dtype=np.float64)
+        jnt_maximum = np.full(len(is_jnt_limited), fill_value=np.inf, dtype=np.float64)
         jnt_minimum[is_jnt_limited], jnt_maximum[is_jnt_limited] = jnt_range[
             is_jnt_limited
         ].T
@@ -126,10 +126,10 @@ class BaseEnv(gym.Env):
 
         # Action
         num_actions = self.sim.model.nu
-        is_limited = self.sim.model.actuator_ctrllimited.ravel().astype(np.bool)
+        is_limited = self.sim.model.actuator_ctrllimited.ravel().astype(np.bool_)
         control_range = self.sim.model.actuator_ctrlrange
-        minimum = np.full(num_actions, fill_value=-np.inf, dtype=np.float)
-        maximum = np.full(num_actions, fill_value=np.inf, dtype=np.float)
+        minimum = np.full(num_actions, fill_value=-np.inf, dtype=np.float64)
+        maximum = np.full(num_actions, fill_value=np.inf, dtype=np.float64)
         minimum[is_limited], maximum[is_limited] = control_range[is_limited].T
 
         self._minimum = minimum
@@ -142,9 +142,9 @@ class BaseEnv(gym.Env):
         self.action_space.seed(self._seed)
 
         jnt_range = self.sim.model.jnt_range
-        is_jnt_limited = self.sim.model.jnt_limited.astype(np.bool)
-        jnt_minimum = np.full(len(is_jnt_limited), fill_value=-np.inf, dtype=np.float)
-        jnt_maximum = np.full(len(is_jnt_limited), fill_value=np.inf, dtype=np.float)
+        is_jnt_limited = self.sim.model.jnt_limited.astype(np.bool_)
+        jnt_minimum = np.full(len(is_jnt_limited), fill_value=-np.inf, dtype=np.float64)
+        jnt_maximum = np.full(len(is_jnt_limited), fill_value=np.inf, dtype=np.float64)
         jnt_minimum[is_jnt_limited], jnt_maximum[is_jnt_limited] = jnt_range[
             is_jnt_limited
         ].T
