@@ -1,7 +1,7 @@
 LIFT_CONFIG = dict(
     id="SawyerLift-v0",
     action_repeat=5, 
-    camera_name='visview', 
+    camera_name='agentview', #camera_name='visview', 
     contact_threshold=-0.002, 
     ctrl_reward_coef=0, 
     debug=False, 

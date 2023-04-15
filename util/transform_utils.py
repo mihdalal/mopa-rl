@@ -261,6 +261,21 @@ def mat2pose(hmat):
     orn = mat2quat(hmat[:3, :3])
     return pos, orn
 
+# added pose2mat for completeness
+def pose2mat(pose):
+    """
+    Converts pose to homogeneous matrix.
+    Args:
+        pose (2-tuple): a (pos, orn) tuple where pos is vec3 float cartesian, and
+            orn is vec4 float quaternion.
+    Returns:
+        np.array: 4x4 homogeneous matrix
+    """
+    homo_pose_mat = np.zeros((4, 4), dtype=np.float32)
+    homo_pose_mat[:3, :3] = quat2mat(pose[1])
+    homo_pose_mat[:3, 3] = np.array(pose[0], dtype=np.float32)
+    homo_pose_mat[3, 3] = 1.0
+    return homo_pose_mat
 
 def mat2quat(rmat, precise=False):
     """
