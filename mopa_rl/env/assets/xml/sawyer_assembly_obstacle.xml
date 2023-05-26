@@ -8,6 +8,7 @@
     <mesh file="../meshes/toy_table/2.stl" name="part2" scale="0.042025927036999993 0.042025927036999993 0.077025927036999993" />
     </asset>
     <include file="./common/sawyer_assembly.xml" />
+    <size njmax="8000" nconmax="4000"/>
     <default>
     </default>
     <visual>
