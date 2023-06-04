@@ -6,7 +6,7 @@ from mopa_rl.util.transform_utils import *
 
 class SawyerPushObstacleEnv(SawyerEnv):
     def __init__(self, **kwargs):
-        kwargs["camera_name"] = "zoomview"
+        #kwargs["camera_name"] = "zoomview"
         super().__init__("sawyer_push_obstacle.xml", **kwargs)
         self._get_reference()
 
