@@ -26,7 +26,7 @@ evaluate_interval="10000"
 ckpt_interval='10000'
 # timelimit="1.5"
 
-python -m rl.main \
+python /home/tarunc/Desktop/research/mopa-rl-1/mopa_rl/rl/main.py \
     --log_root_dir $log_root_dir \
     --prefix $prefix \
     --env $env \
